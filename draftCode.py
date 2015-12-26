@@ -7,7 +7,7 @@ import matplotlib
 import matplotlib.pylab as plt
 import matplotlib.animation as animation
 import time
-#import pandas
+import pandas
 import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -56,7 +56,7 @@ def plot3D(x, y, z, title, myMarker):
 def plot2D(x, y, xtitle, ytitle, title):
 
     plt.figure()
-    plt.plot(x, y)
+    plt.plot(x, y, 'b.')
     
     plt.xlabel(xtitle)
     plt.ylabel(ytitle)
@@ -197,4 +197,7 @@ print len(tempVar), len(timeStamp)
 #plot2D(timeStamp[0:-2], tempVar[0:-2], 'EYE POR X', 'EYE POR Y', 'eyePOR')
 #plot2D(timeStamp[0:-2], tempVar[0:-2], 'EYE POR X', 'EYE POR Y', 'eyePOR')
 print len(velocity[0:-2])
+tempVar2 = np.array(rawMatFile['rightPupilPos_XYZ'], dtype = float)
+
+plot2D( range(2700), tempVar2[0:2700,2], 'EYE POR X', 'EYE POR Y', 'eyePOR')
 plotPORVelocity(velocity[0:-2], eyePOR[0:-2]/100, timeStamp[0:-2], 'EYE POR X', 'EYE POR Y', 'Vertical Velocity')

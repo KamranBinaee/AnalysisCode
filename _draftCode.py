@@ -6,7 +6,7 @@ import matplotlib
 import matplotlib.pylab as plt
 import matplotlib.animation as animation
 import time
-#import pandas
+import pandas
 import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
 

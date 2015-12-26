@@ -8,9 +8,6 @@ import matplotlib.pylab as plt
 import matplotlib.animation as animation
 import time
 
-findItem = lambda searchList, elem: [[i for i, x in enumerate(searchList) if x == e] for e in elem]
-
-
 class sessionData():
 
 	def __init__(self):
@@ -18,7 +15,6 @@ class sessionData():
 		self.textFileList = []
 		self.medianFilterLength = 5
 		self.dataStructure = {}
-		self.trialStartFrameIndex = []
 
 	def parseTextFile(self, textFileName):
 
@@ -27,14 +23,13 @@ class sessionData():
 		print 'Current Work Directory ==>', dataPath
 		os.chdir(dataPath  + '/MatFile')
 		print 'Changed cwd to ==> ', os.getcwd()
-#		TODO: If the mat file exists this step can be skipped		
 #		if ( os.path.isfile(dataPath + self.rawMatFileName)):#dataPath + '\\MatFile'  + '\\rawMat_' + textFileName +'.mat') ):
 #			print '.mat File found ==> Skip Text Parsing'
 #			return
 		os.chdir(dataPath)
 		print 'Returned cwd to ==> ', os.getcwd()
 
-		os.chdir(dataPath  + '\\RawTextFile')
+		os.chdir(dataPath  + '/RawTextFile')
 		print 'Changed cwd to ==> ', os.getcwd()
 		self.txtFile = open(textFileName  +'.txt',"r")
 		os.chdir(dataPath)
@@ -71,6 +66,7 @@ class sessionData():
 		rightPOR_XY = np.array([],  dtype = float);
 		rightPupilRadius = np.array([],  dtype = float);
 		rightEyeLensDistance = np.array([],  dtype = float);
+		rightEyeScreenDistance = np.array([],  dtype = float);
 		rightGazePoint_XYZ = np.array([],  dtype = float);
 		rightGazeDir_XYZ = np.array([],  dtype = float);
 		rightPupilPos_XYZ = np.array([],  dtype = float);
@@ -78,10 +74,15 @@ class sessionData():
 		leftPOR_XY = np.array([],  dtype = float);
 		leftPupilRadius = np.array([],  dtype = float);
 		leftEyeLensDistance = np.array([],  dtype = float);
+		leftEyeScreenDistance = np.array([],  dtype = float);
 		leftGazePoint_XYZ = np.array([],  dtype = float);
 		leftGazeDir_XYZ = np.array([],  dtype = float);
 		leftPupilPos_XYZ = np.array([],  dtype = float);        
-		
+
+                calibrationPosition_XYZ = np.array([], dtype = float)
+                calibrationCounter = np.array([], dtype = float)
+                calibrationInProgress = np.array([], dtype = float)
+				
 		ballInitialPos_XYZ = np.array([], dtype = float)
 		ballFinalPos_XYZ = np.array([], dtype = float)
 		initialVelocity_XYZ = np.array([], dtype = float)
@@ -106,6 +107,8 @@ class sessionData():
 		leftGazePoint_XYZ.resize((1,3))
 		leftPupilPos_XYZ.resize((1,3))                
 
+                calibrationPosition_XYZ.resize((1,3))
+                
 		view_XYZ_Matrix.resize((1,3))
 		view_Quat_Matrix.resize((1,4))
 		Paddle_XYZ_Matrix.resize((1,3))
@@ -152,6 +155,8 @@ class sessionData():
 					
 				elif (Line[i] == 'rightPupilRadius'):
 					rightPupilRadius = np.hstack((rightPupilRadius, Line[i+1]));
+				elif (Line[i] == 'rightEyeScreenDistance'):
+					rightEyeScreenDistance = np.hstack((rightEyeScreenDistance, Line[i+1]));
 				elif (Line[i] == 'rightEyeLensDistance'):
 					rightEyeLensDistance = np.hstack((rightEyeLensDistance, Line[i+1]));
 				elif (Line[i] == 'rightPOR_XY'):
@@ -166,6 +171,8 @@ class sessionData():
 
 				elif (Line[i] == 'leftPupilRadius'):
 					leftPupilRadius = np.hstack((leftPupilRadius, Line[i+1]));
+				elif (Line[i] == 'leftEyeScreenDistance'):
+					leftEyeScreenDistance = np.hstack((leftEyeScreenDistance, Line[i+1]));
 				elif (Line[i] == 'leftEyeLensDistance'):
 					leftEyeLensDistance = np.hstack((leftEyeLensDistance, Line[i+1]));
 				elif (Line[i] == 'leftPOR_XY'):
@@ -176,8 +183,13 @@ class sessionData():
 					leftGazePoint_XYZ = np.vstack((leftGazePoint_XYZ, np.array([float(Line[i+1]), float(Line[i+2]), float(Line[i+3])]) ));
 				elif (Line[i] == 'leftPupilPos_XYZ'):
 					leftPupilPos_XYZ = np.vstack((leftPupilPos_XYZ, np.array([float(Line[i+1]), float(Line[i+2]), float(Line[i+3])]) ));
-
-					
+                                
+				elif (Line[i] == 'calibrationInProgress'):
+				       calibrationInProgress = 	np.hstack((calibrationInProgress, Line[i+1]));
+				elif (Line[i] == 'calibrationPosition'):
+					calibrationPosition_XYZ = np.vstack((calibrationPosition_XYZ, np.array([Line[i+1], Line[i+2], Line[i+3]]) ));
+				elif (Line[i] == 'calibrationCounter'):
+					calibrationCounter = np.hstack((calibrationCounter, Line[i+1]));
 					
 				elif (Line[i] == 'viewPos_XYZ'):
 					view_XYZ_Matrix = np.vstack((view_XYZ_Matrix, np.array([Line[i+1], Line[i+2], Line[i+3]]) ));
@@ -242,6 +254,7 @@ class sessionData():
 		leftGazeDir_XYZ = np.delete(leftGazeDir_XYZ,0,0)
 		leftPupilPos_XYZ= np.delete(leftPupilPos_XYZ,0,0)
 		
+		calibrationPosition_XYZ = np.delete(calibrationPosition_XYZ, 0, 0)
 		#print 'Pos size=\n', XYZ_Matrix.shape
 		#print 'F size=\n', F_Matrix.shape
 	#	print 'E size=\n', eyePOR_XY.shape
@@ -263,19 +276,21 @@ class sessionData():
 				
 		self.rawDataStructure = {
 		
-		'FrameTime':F_Matrix,'inCalibrateBool':inCalibrate, 'EventFlag':EventFlag,'TrialType':TrialType, 
+		'FrameTime':F_Matrix,'inCalibrateBool':inCalibrate, 'calibrationInProgress':calibrationInProgress, 'EventFlag':EventFlag,'TrialType':TrialType, 
 		'view_XYZ_Pos':view_XYZ_Matrix,'Quat_Matrix':view_Quat_Matrix, 'paddlePos_XYZ':Paddle_XYZ_Matrix,
 		'paddleQUAT_WXYZ':Paddle_Quat_Matrix, 'ballPos_XYZ':Ball_XYZ_Matrix, 'ballVel_XYZ':Ball_Vel_XYZ_Matrix,
 		'ballPix_XYDist': BallPix_XYDist, 'invViewMat': Inv_view_Matrix, 'invProMat':Inv_Pro_Matrix,
-		
+
+                'calibrationCounter' : calibrationCounter, 'calibrationPosition_XYZ' : calibrationPosition_XYZ,
+                
 		'eyeTimeStamp':eyeTimeStamp, 'IOD':IOD, 'IPD':IPD,
 		
 		'eyePOR_XY':(eyePOR_XY), 'eyeGazeDir_XYZ':eyeGazeDir_XYZ, 'eyeGazePoint_XYZ':(eyeGazePoint_XYZ),
 
-		'rightEyeLensDistance':(rightEyeLensDistance), 'rightPupilRadius':(rightPupilRadius), 'rightPOR_XY':(rightPOR_XY),
+		'rightEyeLensDistance':(rightEyeLensDistance), 'rightEyeScreenDistance' : (rightEyeScreenDistance), 'rightPupilRadius':(rightPupilRadius), 'rightPOR_XY':(rightPOR_XY),
 		'rightGazePoint_XYZ':(rightGazePoint_XYZ), 'rightGazeDir_XYZ':(rightGazeDir_XYZ), 'rightPupilPos_XYZ':(rightPupilPos_XYZ),
 		
-		'leftEyeLensDistance':(leftEyeLensDistance), 'leftPupilRadius':(leftPupilRadius), 'leftPOR_XY':(leftPOR_XY),
+		'leftEyeLensDistance':(leftEyeLensDistance), 'leftEyeScreenDistance' : (leftEyeScreenDistance), 'leftPupilRadius':(leftPupilRadius), 'leftPOR_XY':(leftPOR_XY),
 		'leftGazePoint_XYZ':(leftGazePoint_XYZ), 'leftGazeDir_XYZ':(leftGazeDir_XYZ), 'leftPupilPos_XYZ':(leftPupilPos_XYZ),
 		
 		'ballInitialPos_XYZ': (ballInitialPos_XYZ), 'ballFinalPos_XYZ': (ballFinalPos_XYZ), 'initialVelocity_XYZ': (initialVelocity_XYZ),
@@ -283,7 +298,7 @@ class sessionData():
 		'PD': (presentationDuration), 'BD':(blankDuration), 'PD' : (postBlankDuration), 'TTC': (timeToContact), 'beta':(beta), 'theta':(theta)
 		}
 
-		os.chdir(dataPath  + '\\MatFile')
+		os.chdir(dataPath  + '/MatFile')
 		print 'Changed cwd to ==> ', os.getcwd()
 		
 		sio.savemat(self.rawMatFileName, self.rawDataStructure)
@@ -309,119 +324,17 @@ class sessionData():
 		
 	def organizeDataByTrial(self):
 		#print 'Event Flag =', self.rawDataStructure['EventFlag']
-		eventFlag = np.array(self.rawDataStructure['EventFlag'][:], dtype = float)
-		print 'len', len(eventFlag)
-
-		# Just some Sample eventFlags
-		eventFlag[0]  = 1
-		eventFlag[100]  = 1
-		eventFlag[200]  = 1
-		eventFlag[300]  = 1
-		eventFlag[400]  = 1
-		
-		self.trialStartFrameIndex = findItem(eventFlag, [1])
-		# TODO: Here the large raw data structure has to break down into smaller ones per each trial
-		tempVar1 = []
-		for i in range(len(self.trialStartFrameIndex[0])-1):
-			
-			print 'idx = ',self.trialStartFrameIndex[0][i]
-			# TODO: here I should extract the dictionary keys and do a for on them
-			tempVar1.append(eventFlag[self.trialStartFrameIndex[0][i]:self.trialStartFrameIndex[0][i+1]])
-
-		sampleDataStruct = {'eventFlag' : tempVar1}
-		return  sampleDataStruct
-
-	def plotPORVelocity(self,velocity, POR, time, xtitle, ytitle, title):
-		plt.figure()
-		plt.plot(time, velocity)
-		plt.hold(True)    
-		plt.plot(time, POR, 'r.')
-		
-		plt.xlabel(xtitle)
-		plt.ylabel(ytitle)
-		plt.title(title)
-		plt.grid(True)
-		plt.show()
-		
-	def plotGazePoints(self, idx, gazePoints, calibrationPoints, viewPoint, title, myMarker):
-		mpl.rcParams['legend.fontsize'] = 10
-		
-		fig = plt.figure()
-		ax = fig.gca(projection='3d')
-		ax.plot(calibrationPoints[idx,0], calibrationPoints[idx,2], calibrationPoints[idx,1], 'r.')
-		ax.hold(True)
-		ax.plot(gazePoints[idx,0], gazePoints[idx,2], gazePoints[idx,1], myMarker,label=title)
-		ax.hold(True)
-		ax.plot(viewPoint[idx,0], viewPoint[idx,2], viewPoint[idx,1], 'D',label=title)
-		ax.legend()
-		plt.grid(True)
-		ax.set_xlabel('X(m)')
-		ax.set_ylabel('Y(m)')
-		ax.set_zlabel('Z(m)')
-		plt.show()
-	def plot3D(self, x, y, z, title, myMarker):
-		mpl.rcParams['legend.fontsize'] = 10
-		
-		fig = plt.figure()
-		ax = fig.gca(projection='3d')
-		ax.plot(x, y, z, myMarker,label=title)
-		ax.legend()
-		plt.grid(True)
-		ax.set_xlabel('X(m)')
-		ax.set_ylabel('Y(m)')
-		ax.set_zlabel('Z(m)')
-		plt.show()
-
-	def plot2D(self, x, y, xtitle, ytitle, title):
-
-		plt.figure()
-		plt.plot(x, y)
-		
-		plt.xlabel(xtitle)
-		plt.ylabel(ytitle)
-		plt.title(title)
-		plt.grid(True)
-		plt.show()
-
-	def isInList(self, needle, haystack):
-		try:
-			return haystack.index(needle)
-		except :
-			return None
-		
-	def findTrialIndex(self, dataFlag):
-		indexList = []
-		for x in range(28):
-			indexList.append(x*100)
-		# TODO: This should be fixed: Due to a data type problem data.index didn't work for ndarray
-		
-		#print type(dataFlag)
-		#for counter in range(27):
-		#    indexList.append(isInList(counter, dataFlag)) #dataFlag.index(counter))
-		return indexList
-
-	def plotPOR(self, rawMatFile, eyeString):
-		tempVar = rawMatFile[eyeString]
-	#    plot2D( tempVar[0:2700,0], tempVar[0:2700,1], 'EYE POR X', 'EYE POR Y', eyeString)
-		x = tempVar[0:2700,0]
-		y = tempVar[0:2700,1]
-		xtitle = 'EYE POR X'
-		ytitle = 'EYE POR Y'
-		
-		plt.figure()
-		plt.plot(x, y,'b.')
-		
-		plt.xlabel(xtitle)
-		plt.ylabel(ytitle)
-		plt.title(title)
-		plt.grid(True)
-		plt.show()
-		
-	def createLine(self, point1, point2):
-		vector = np.subtract(point2, point1)
-		vector = np.divide(vector, np.linalg.norm(vector))
-		return [vector, point1]
-
+		self.rawMatFile =  sio.loadmat(self.rawMatFileName)
+		print 'Event Flag =', self.rawMatFile['EventFlag']
+		sum = 0.0		
+#		for i in range(len(self.rawMatFile['EventFlag'])):
+#			sum = sum + self.rawMatFile['EventFlag'][i]
+		print 'len', len(self.rawMatFile['EventFlag']), type(self.rawMatFile['EventFlag'][0]), sum
+		return  
+	def plot2D(self, x, y, figureTitle):
+		return
+	def plot3D(self, x, y, z, figureTitle):
+		return
 	def update_line1(self, num, sessionData, line):
 		
 		line.set_marker('p')
@@ -444,17 +357,17 @@ if __name__ == "__main__":
 	
 	dataPath = os.getcwd()
 	frameNumber = 0
-	textFileName = 'exp_data-2015-8-18-18-34'# 'exp_data-2015-4-24-13-34'
+	textFileName = 'exp_data-2015-10-25-22-29'#'exp_data-2015-10-25-18-35'#'exp_data-2015-10-6-20-8'#'exp_data-2015-9-30-14-26'#'exp_data-2015-9-25-20-34'#'exp_data-2015-8-18-18-34'# 'exp_data-2015-4-24-13-34'
 	mySessionData = sessionData()
 	mySessionData.parseTextFile(textFileName)
 
 	mySessionData.dataStructure = { 'rawData_tr' : None, 'processedData_tr' : None, 'expInfo' : None, 'dependentMeasures_tr': None }
 
-	#os.chdir(dataPath  + '\\MatFile')
-	#print 'Changed cwd to ==> ', os.getcwd()
+	os.chdir(dataPath  + '/MatFile')
+	print 'Changed cwd to ==> ', os.getcwd()
 	mySessionData.dataStructure['rawData_tr'] = mySessionData.organizeDataByTrial()
-	#os.chdir(dataPath)
-	#print 'Returned cwd to ==> ', os.getcwd()
+	os.chdir(dataPath)
+	print 'Returned cwd to ==> ', os.getcwd()
 	
 	
 	#print 'Data =  ', mySessionData.dataStructure['rawData_tr']['rightPupilPos_XYZ'][1000:1020,2] #, sessionData['rawData_tr']['rightPupilPos_XYZ'][0][1], sessionData['rawData_tr']['rightPupilPos_XYZ'][0][2]

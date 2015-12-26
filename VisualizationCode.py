@@ -16,8 +16,54 @@ import math
 #from gazeTools import gazeSphere
 #from gazeTools import gazeVector
 
-    
+def dotproduct( v1, v2):
+  return sum((a*b) for a, b in zip(v1, v2))
 
+
+def length(v):
+  return math.sqrt(dotproduct(v, v))
+
+
+def angle( v1, v2):
+  return math.acos(dotproduct(v1, v2) / (length(v1) * length(v2)))
+
+
+def quaternion2Matrix(Q):
+    Q = Q/np.linalg.norm(Q); # Ensure Q has unit norm
+    
+    # Set up convenience variables
+    x = Q[0]; y = Q[1]; z = Q[2]; w = Q[3];
+    w2 = w*w; x2 = x*x; y2 = y*y; z2 = z*z;
+    xy = x*y; xz = x*z; yz = y*z;
+    wx = w*x; wy = w*y; wz = w*z;
+    
+    M = np.array([[w2+x2-y2-z2 , 2*(xy - wz) , 2*(wy + xz) ,  0],
+         [ 2*(wz + xy) , w2-x2+y2-z2 , 2*(yz - wx) ,  0 ],
+         [ 2*(xz - wy) , 2*(wx + yz) , w2-x2-y2+z2 ,  0 ],
+         [     0      ,       0     ,       0     ,  1 ]], dtype = float);
+    return M;
+
+
+def createLine( point0, point1 ):
+        
+    unitVector = np.subtract(point0, point1)/length(np.subtract(point0, point1))
+    #print 'unitVector', unitVector
+    return unitVector
+
+def findLinePlaneIntersection(point_0, line, planeNormal, point_1):
+    
+    s = point_1 - point_0
+    numerator = dotproduct(s, planeNormal)
+    denumerator = np.inner(line, planeNormal)
+    if (denumerator == 0):
+        print 'No Intersection'
+        return None
+    #print numerator, denumerator
+    d = np.divide(numerator, denumerator)
+    intersectionPoint = np.multiply(d, line) + point_0
+    #print 'result', d, intersectionPoint
+    return intersectionPoint
+ 
 class visualization():
 
     """
@@ -33,8 +79,13 @@ class visualization():
         self.roomWidth = 40
         self.roomHeight = 20
         self.viewPointCounter = 0
-
-
+        self.internalCounter = 0
+        self.internalCounterBall = 0
+        self.truePOR_XY = np.empty([1, 2], dtype=float)
+        self.cyclopeanPOR_XY = np.empty([1, 2], dtype=float)
+        self.rightEyePOR_XY = np.empty([1, 2], dtype=float)
+        self.leftEyePOR_XY = np.empty([1, 2], dtype=float)
+        
     def setLighting(self):
         
         viz.MainView.getHeadLight().disable()
@@ -132,8 +183,8 @@ class visualization():
         self.ballPlane.setPosition(0,5,-20)
         #makes the wall appear white
         self.ballPlane.color(viz.WHITE)
-        self.ballPlane.alpha(0.2)
-        self.text_object = viz.addText3D( 'Target Plane',parent=self.ballPlane,pos=[-0.4,0.6,0])
+        self.ballPlane.alpha(0.0)
+        self.text_object = viz.addText3D( '',parent=self.ballPlane,pos=[-0.4,0.6,0])
         self.text_object.setScale(0.2,0.2,0.2)
 
 
@@ -157,53 +208,76 @@ class visualization():
         print 'Returned cwd to ==> ', os.getcwd()
         
         
-        eventFlag
+        #eventFlag
         #calibrationStatus = np.array(map(float,self.rawMatFile['calibrationStatus'][:]), dtype= float)
+        gx = map(float, self.rawMatFile['eyePOR_XY'][:,0])
+        gy = map(float, self.rawMatFile['eyePOR_XY'][:,1])
+        eyePOR_XY = np.array([gx, gy], dtype = float)
+
+        rgx = map(float, self.rawMatFile['rightPOR_XY'][:,0])
+        rgy = map(float, self.rawMatFile['rightPOR_XY'][:,1])
+        rightPOR_XY = np.array([rgx, rgy], dtype = float)
+
         rgx = map(float, self.rawMatFile['rightGazePoint_XYZ'][:,0])
         rgy = map(float, self.rawMatFile['rightGazePoint_XYZ'][:,1])
         rgz = map(float, self.rawMatFile['rightGazePoint_XYZ'][:,2])
-
         rightGazePoint_XYZ = np.array([rgx, rgy, rgz], dtype = float)
 
         rgx = map(float, self.rawMatFile['rightPupilPos_XYZ'][:,0])
         rgy = map(float, self.rawMatFile['rightPupilPos_XYZ'][:,1])
         rgz = map(float, self.rawMatFile['rightPupilPos_XYZ'][:,2])
-
         rightPupilPos_XYZ = np.array([rgx, rgy, rgz], dtype = float)
 
         rgx = map(float, self.rawMatFile['rightGazeDir_XYZ'][:,0])
         rgy = map(float, self.rawMatFile['rightGazeDir_XYZ'][:,1])
         rgz = map(float, self.rawMatFile['rightGazeDir_XYZ'][:,2])
-
         rightGazeDir_XYZ = np.array([rgx, rgy, rgz], dtype = float)
+
+        lgx = map(float, self.rawMatFile['leftPOR_XY'][:,0])
+        lgy = map(float, self.rawMatFile['leftPOR_XY'][:,1])
+        leftPOR_XY = np.array([lgx, lgy], dtype = float)
         
         lgx = map(float, self.rawMatFile['leftGazePoint_XYZ'][:,0])
         lgy = map(float, self.rawMatFile['leftGazePoint_XYZ'][:,1])
         lgz = map(float, self.rawMatFile['leftGazePoint_XYZ'][:,2])
-
         leftGazePoint_XYZ = np.array([lgx, lgy, lgz], dtype = float)
 
         lgx = map(float, self.rawMatFile['leftPupilPos_XYZ'][:,0])
         lgy = map(float, self.rawMatFile['leftPupilPos_XYZ'][:,1])
         lgz = map(float, self.rawMatFile['leftPupilPos_XYZ'][:,2])
-
         leftPupilPos_XYZ = np.array([lgx, lgy, lgz], dtype = float)
 
         lgx = map(float, self.rawMatFile['leftGazeDir_XYZ'][:,0])
         lgy = map(float, self.rawMatFile['leftGazeDir_XYZ'][:,1])
         lgz = map(float, self.rawMatFile['leftGazeDir_XYZ'][:,2])
-
         leftGazeDir_XYZ = np.array([lgx, lgy, lgz], dtype = float)
 
-        ball_X = map(float, self.rawMatFile['ballPos_XYZ'][:,0])
-        ball_Y = map(float, self.rawMatFile['ballPos_XYZ'][:,1])
-        ball_Z = map(float, self.rawMatFile['ballPos_XYZ'][:,2])
+#        ball_X = map(float, self.rawMatFile['ballPos_XYZ'][:,0])
+#        ball_Y = map(float, self.rawMatFile['ballPos_XYZ'][:,1])
+#        ball_Z = map(float, self.rawMatFile['ballPos_XYZ'][:,2])
+#
+#        ball_Pos_XYZ = np.array([ball_X, ball_Y, ball_Z], dtype = float)
 
-        ball_Pos_XYZ = np.array([ball_X, ball_Y, ball_Z], dtype = float)
+        ball_X = map(float, self.rawMatFile['calibrationPosition_XYZ'][:,0])
+        ball_Y = map(float, self.rawMatFile['calibrationPosition_XYZ'][:,1])
+        ball_Z = map(float, self.rawMatFile['calibrationPosition_XYZ'][:,2])
+        calibration_Pos_XYZ = np.array([ball_X, ball_Y, ball_Z], dtype = float)
 
-        ball_Vel_X = map(float, self.rawMatFile['ballVel_XYZ'][:,0])
-        ball_Vel_Y = map(float, self.rawMatFile['ballVel_XYZ'][:,1])
-        ball_Vel_Z = map(float, self.rawMatFile['ballVel_XYZ'][:,2])
+        calibrationFlag = map(float, self.rawMatFile['calibrationInProgress'])
+        
+#        ball_X = map(float, self.rawMatFile['ballPos_XYZ'][:,0])
+#        ball_Y = map(float, self.rawMatFile['ballPos_XYZ'][:,1])
+#        ball_Z = map(float, self.rawMatFile['ballPos_XYZ'][:,2])
+#        ball_Pos_XYZ = np.array([ball_X, ball_Y, ball_Z], dtype = float)
+        ball_Pos_XYZ = calibration_Pos_XYZ
+
+#        ball_Vel_X = map(float, self.rawMatFile['ballVel_XYZ'][:,0])
+#        ball_Vel_Y = map(float, self.rawMatFile['ballVel_XYZ'][:,1])
+#        ball_Vel_Z = map(float, self.rawMatFile['ballVel_XYZ'][:,2])
+#        ball_Vel_XYZ = np.array([ball_Vel_X, ball_Vel_Y, ball_Vel_Z], dtype = float);
+        ball_Vel_X = map(float, self.rawMatFile['calibrationPosition_XYZ'][:,0])
+        ball_Vel_Y = map(float, self.rawMatFile['calibrationPosition_XYZ'][:,1])
+        ball_Vel_Z = map(float, self.rawMatFile['calibrationPosition_XYZ'][:,2])
         ball_Vel_XYZ = np.array([ball_Vel_X, ball_Vel_Y, ball_Vel_Z], dtype = float);
 
     #    Ball_Pix_X = map(float, self.rawMatFile['ballPix_XYDist'][:,0])
@@ -261,16 +335,79 @@ class visualization():
     #    print 'calibrationStatus =', calibrationStatus
         self.rawDataStruct = {'rightGazePoint_XYZ' : rightGazePoint_XYZ, 'rightPupilPos_XYZ' : rightPupilPos_XYZ, 'rightGazeDir_XYZ' : rightGazeDir_XYZ,
                               'leftGazePoint_XYZ' : leftGazePoint_XYZ, 'leftPupilPos_XYZ' : leftPupilPos_XYZ, 'leftGazeDir_XYZ' : leftGazeDir_XYZ,
+                              'rightPOR_XY' : rightPOR_XY, 'leftPOR_XY' :leftPOR_XY, 'eyePOR_XY' : eyePOR_XY, 
+                              'calibrationFlag' : calibrationFlag, 'calibration_Pos_XYZ' : calibration_Pos_XYZ,
                                 'ball_Pos_XYZ' : ball_Pos_XYZ, 'ball_Vel_XYZ' : ball_Vel_XYZ, 'paddle_Pos_XYZ' : paddle_Pos_XYZ, 'paddle_Quat_WXYZ' : paddle_Quat_WXYZ,
                                 'view_Pos_XYZ' : view_Pos_XYZ, 'view_Quat_WXYZ' : view_Quat_WXYZ, 'frameTime' : frameTime, 'eventFlag' : eventFlag}
 
     def createVisualObjects(self):
 
+        self.IOD = 0.06
+        
+        # create a node3D leftEyeNode
+        self.cyclopEyeNode = vizshape.addSphere(0.015, color = viz.GREEN)
+        self.cyclopEyeNode.alpha(0.3)
+        #cyclopEyeNode.visible(viz.OFF)
+        self.cyclopEyeNode.setPosition(*self.rawDataStruct['view_Pos_XYZ'][:,0])
+        self.cyclopEyeNode.setQuat(*self.rawDataStruct['view_Quat_WXYZ'][:,0])
+
+        # create a node3D rightEyeNode
+        self.rightEyeNode = vizshape.addSphere(0.015, color = viz.RED)
+        #rightEyeNode.visible(viz.OFF)
+        self.rightEyeNode.setParent(self.cyclopEyeNode)
+        self.rightEyeNode.setPosition(self.IOD/2, 0, 0.0,viz.ABS_PARENT)
+        self.rightEyeNode.alpha(0.3)
+    #    right_sphere = gazeSphere(eyeTracker,viz.RIGHT_EYE,rightEyeNode,[clientWindowID],sphereColor=viz.ORANGE)
+    #    rightGazeVector = gazeVector(eyeTracker,viz.RIGHT_EYE,rightEyeNode,[clientWindowID],gazeVectorColor=viz.ORANGE)
+    #    right_sphere.toggleUpdate()
+    #    rightGazeVector.toggleUpdate()
+    #    right_sphere.node3D.alpha(0.7)    
+
+
+        # create a node3D leftEyeNode
+        self.leftEyeNode = vizshape.addSphere(0.015, color = viz.BLUE)
+        #leftEyeNode.visible(viz.OFF)
+        self.leftEyeNode.setParent(self.cyclopEyeNode)
+        self.leftEyeNode.setPosition(-self.IOD/2, 0, 0.0,viz.ABS_PARENT)
+        self.leftEyeNode.alpha(0.3)
+    #    left_sphere = gazeSphere(eyeTracker,viz.LEFT_EYE,leftEyeNode,[clientWindowID],sphereColor=viz.YELLOW)
+    #    leftGazeVector = gazeVector(eyeTracker,viz.LEFT_EYE,leftEyeNode,[clientWindowID],gazeVectorColor=viz.YELLOW)
+    #    left_sphere.toggleUpdate()
+    #    leftGazeVector.toggleUpdate()
+    #    left_sphere.node3D.alpha(0.7)
+        self.hmdDisplay = vizshape.addPlane([0.126, 0.071], axis = -vizshape.AXIS_Z, color = viz.GRAY)
+        self.hmdDisplay.alpha(0.3)
+        self.hmdDisplay.setParent(self.cyclopEyeNode)
+        self.hmdDisplay.setPosition([0,0,0.0725], viz.ABS_PARENT) # 0.0725
+
+        self.pixelatedBall = vizshape.addCircle(0.001, axis = -vizshape.AXIS_Z, color = viz.WHITE)
+        self.pixelatedBall.setParent(self.hmdDisplay)
+        self.pixelatedBall.setPosition([0,0,0])
+        self.pixelatedBall.alpha(1)
+        
+        self.eyePOR = vizshape.addCircle(0.001, axis = -vizshape.AXIS_Z, color = viz.GREEN)
+        self.eyePOR.setParent(self.hmdDisplay)
+        self.eyePOR.setPosition([0,0,0])
+        self.eyePOR.alpha(1)
+
+        self.rightPOR = vizshape.addCircle(0.001, axis = -vizshape.AXIS_Z, color = viz.RED)
+        self.rightPOR.setParent(self.hmdDisplay)
+        self.rightPOR.setPosition([0,0,0])
+        self.rightPOR.alpha(1)
+
+        self.leftPOR = vizshape.addCircle(0.001, axis = -vizshape.AXIS_Z, color = viz.BLUE)
+        self.leftPOR.setParent(self.hmdDisplay)
+        self.leftPOR.setPosition([0,0,0])
+        self.leftPOR.alpha(1)
+
+
+
         #creats a sphere(the ball) with radius of 5cm
-        self.ball = vizshape.addSphere(radius = .05)
+        self.ball = vizshape.addSphere(radius = .08)
         #colors the ball red
         self.ball.color(viz.YELLOW)
         self.ball.visible(True)
+        self.ball.setParent(self.cyclopEyeNode)
 
         self.Origin = vizshape.addAxes()
         self.Origin.setPosition(-5.5,0.1,8)
@@ -288,38 +425,7 @@ class visualization():
         self.Hand.color(viz.RED)
         self.Hand.visible(True)
 
-        self.IOD = 0.06
-        
-        # create a node3D leftEyeNode
-        self.cyclopEyeNode = vizshape.addSphere(0.015, color = viz.GREEN)
-        #cyclopEyeNode.visible(viz.OFF)
-        self.cyclopEyeNode.setPosition(*self.rawDataStruct['view_Pos_XYZ'][:,0])
-        self.cyclopEyeNode.setQuat(*self.rawDataStruct['view_Quat_WXYZ'][:,0])
-
-        # create a node3D rightEyeNode
-        self.rightEyeNode = vizshape.addSphere(0.015, color = viz.RED)
-        #rightEyeNode.visible(viz.OFF)
-        self.rightEyeNode.setParent(self.cyclopEyeNode)
-        self.rightEyeNode.setPosition(self.IOD/2, 0, 0.0,viz.ABS_PARENT)
-    #    right_sphere = gazeSphere(eyeTracker,viz.RIGHT_EYE,rightEyeNode,[clientWindowID],sphereColor=viz.ORANGE)
-    #    rightGazeVector = gazeVector(eyeTracker,viz.RIGHT_EYE,rightEyeNode,[clientWindowID],gazeVectorColor=viz.ORANGE)
-    #    right_sphere.toggleUpdate()
-    #    rightGazeVector.toggleUpdate()
-    #    right_sphere.node3D.alpha(0.7)    
-
-
-        # create a node3D leftEyeNode
-        self.leftEyeNode = vizshape.addSphere(0.015, color = viz.BLUE)
-        #leftEyeNode.visible(viz.OFF)
-        self.leftEyeNode.setParent(self.cyclopEyeNode)
-        self.leftEyeNode.setPosition(-self.IOD/2, 0, 0.0,viz.ABS_PARENT)
-    #    left_sphere = gazeSphere(eyeTracker,viz.LEFT_EYE,leftEyeNode,[clientWindowID],sphereColor=viz.YELLOW)
-    #    leftGazeVector = gazeVector(eyeTracker,viz.LEFT_EYE,leftEyeNode,[clientWindowID],gazeVectorColor=viz.YELLOW)
-    #    left_sphere.toggleUpdate()
-    #    leftGazeVector.toggleUpdate()
-    #    left_sphere.node3D.alpha(0.7)
-
-        # Creating a Line to represent Gaze Vector
+        # Creating a Line to represent Cyclopean Eye Gaze Vector
         viz.startLayer(viz.LINES)
         viz.vertex(0,0,0)
         viz.vertex(0,0,3)
@@ -333,7 +439,7 @@ class visualization():
         self.eyeGazeSphere.setParent(self.cyclopEyeNode)
 
 
-        # Creating a Line to represent Gaze Vector
+        # Creating a Line to represent Right Eye Gaze Vector
         viz.startLayer(viz.LINES)
         viz.vertex(0,0,0)
         viz.vertex(0,0,3)
@@ -345,8 +451,9 @@ class visualization():
         #rightGazeVector.setScale(5,5,5)
         self.rightGazeSphere = vizshape.addSphere(0.02, color = viz.RED)
         self.rightGazeSphere.setParent(self.rightEyeNode)
+        self.rightGazeSphere.visible(False)
 
-        # Creating a Line to represent Gaze Vector
+        # Creating a Line to represent Left Eye Gaze Vector
         viz.startLayer(viz.LINES)
         viz.vertex(0,0,0)
         viz.vertex(0,0,3)
@@ -357,6 +464,7 @@ class visualization():
         #leftGazeVector.setScale(5,5,5)
         self.leftGazeSphere = vizshape.addSphere(0.02, color = viz.BLUE)
         self.leftGazeSphere.setParent(self.leftEyeNode)
+        self.leftGazeSphere.visible(False)
 
 
         # Creating a Line to represent Eye-Ball Vector
@@ -365,46 +473,19 @@ class visualization():
         viz.vertex(0,0,3)
         viz.vertexColor(viz.YELLOW)
         self.EyeBallLine = viz.endLayer() # Object will contain both points and lines
-        self.EyeBallLine.visible(True)
+        self.EyeBallLine.visible(False)
         #EyeBallLine.setScale(5,5,5)
 
-        #self.male = viz.add('vcc_male.cfg') 
+        self.male = viz.add('ktex.obj') 
         #male.state(1) #looping idle animation
         #self.headBone = self.male.getBone('Bip01 Head')
         #self.headBone.lock()
-        #self.male.setParent(self.cyclopEyeNode)
+        self.male.setParent(self.cyclopEyeNode)
         #self.male.setPosition([0,-1.7,-0.08], viz.ABS_PARENT)
         #self.male.setPosition([-0.45, 0, 1.24])
-        #male.setEuler([0,-5,0], viz.ABS_PARENT)
+        #self.male.setEuler([0,-5,0], viz.ABS_PARENT)
         #male.alpha(0.8)
         
-    def dotproduct(self, v1, v2):
-      return sum((a*b) for a, b in zip(v1, v2))
-
-
-    def length(self, v):
-      return math.sqrt(self.dotproduct(v, v))
-
-
-    def angle(self, v1, v2):
-      return math.acos(self.dotproduct(v1, v2) / (self.length(v1) * self.length(v2)))
-
-
-    def quaternion2Matrix(self, Q):
-        Q = Q/np.linalg.norm(Q); # Ensure Q has unit norm
-        
-        # Set up convenience variables
-        x = Q[0]; y = Q[1]; z = Q[2]; w = Q[3];
-        w2 = w*w; x2 = x*x; y2 = y*y; z2 = z*z;
-        xy = x*y; xz = x*z; yz = y*z;
-        wx = w*x; wy = w*y; wz = w*z;
-        
-        M = np.array([[w2+x2-y2-z2 , 2*(xy - wz) , 2*(wy + xz) ,  0],
-             [ 2*(wz + xy) , w2-x2+y2-z2 , 2*(yz - wx) ,  0 ],
-             [ 2*(xz - wy) , 2*(wx + yz) , w2-x2-y2+z2 ,  0 ],
-             [     0      ,       0     ,       0     ,  1 ]], dtype = float);
-        return M;
-
     #def FindMinimumAngle(v1, v2, fr):
     #    
     #    global lEyeRotationMatrix, lEyeOffsetMatrix, View_Quat_WXYZ;
@@ -436,12 +517,23 @@ class visualization():
         if self.frameNumber < len(self.rawDataStruct['frameTime']) - 1:
             #pointCounter[calibrationCounter[self.frameNumber]] = pointCounter[calibrationCounter[self.frameNumber]] + 1
             self.frameNumber = self.frameNumber + 1
+            if(self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+                self.internalCounter = self.internalCounter + 1
+            else:
+                self.internalCounterBall = self.internalCounterBall + 1
         else:
             #self.frameNumber = 0
-            print 'Data = ', errorArray
+            #print 'Data = ', errorArray
             MatFile = {'Data':errorArray}
-            MatFileName = 'ErrorData' 
-            sio.savemat(MatFileName + '.mat', MatFile)
+            self.rawDataStruct['truePOR_XY'] = self.truePOR_XY.T
+            self.rawDataStruct['rightEyePOR_XY'] = self.rightEyePOR_XY.T
+            self.rawDataStruct['leftEyePOR_XY'] = self.leftEyePOR_XY.T
+            self.rawDataStruct['cyclopeanPOR_XY'] = self.cyclopeanPOR_XY.T
+            
+            MatFileName = 'preProcessedData'+ self.textFileName 
+            sio.savemat(MatFileName + '.mat', self.rawDataStruct)
+            print 'PreProcessed Data saved into mat file', MatFileName + '.mat'
+            print 'Mat File Saving Quit!!'
             viz.quit()
         if (self.rawDataStruct['eventFlag'][self.frameNumber] == 1):
             self.PD = 0.8
@@ -452,7 +544,10 @@ class visualization():
     #    EndIndex   = TrialEndIndex[counter]
     #    for self.frameNumber in range(StartIndex, EndIndex):
         #print 'F=', self.frameNumber,'P=', Ball_Pos_XYZ[:,self.frameNumber],'Q=',View_Quat_WXYZ[:,self.frameNumber], '\n'
-        self.ball.setPosition(*self.rawDataStruct['ball_Pos_XYZ'][:,self.frameNumber]) # X[:,self.frameNumber])#
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.ball.setPosition(*self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter])
+        else:
+            self.ball.setPosition(*self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall], mode = viz.ABS_GLOBAL) # X[:,self.frameNumber])#
         self.Hand.setPosition(*self.rawDataStruct['paddle_Pos_XYZ'][:,self.frameNumber])
         self.Hand.setQuat(*self.rawDataStruct['paddle_Quat_WXYZ'][:,self.frameNumber])
         
@@ -460,53 +555,143 @@ class visualization():
         #self.male.setEuler([0, 0, 0], viz.ABS_GLOBAL)
 
         
-        self.V1 = self.rawDataStruct['ball_Pos_XYZ'][:,self.frameNumber] - self.rawDataStruct['view_Pos_XYZ'][:,self.frameNumber]
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.V1 = self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter] - self.rawDataStruct['view_Pos_XYZ'][:,self.frameNumber]
+        else:
+            self.V1 = self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall] - self.rawDataStruct['view_Pos_XYZ'][:,self.frameNumber]  
+            
         self.V1 = np.hstack((self.V1,1))
         self.V1.reshape(4,1)
 
-
-
+        viz.MainView.setPosition(*self.rawDataStruct['view_Pos_XYZ'][:,self.frameNumber])
+        viz.MainView.setQuat(*self.rawDataStruct['view_Quat_WXYZ'][:,self.frameNumber])
+        
         self.cyclopEyeNode.setPosition(*self.rawDataStruct['view_Pos_XYZ'][:,self.frameNumber])
         self.cyclopEyeNode.setQuat(*self.rawDataStruct['view_Quat_WXYZ'][:,self.frameNumber])
+
+        x = self.rawDataStruct['eyePOR_XY'][0,self.frameNumber]
+        y = self.rawDataStruct['eyePOR_XY'][1,self.frameNumber]
+        x = (x /1920.0)*0.126 - 0.126/2.0
+        y = -(y/1080.0)*0.071 + 0.071/2.0
+        z = self.eyePOR.getPosition()[2]
+        self.eyePOR.setPosition([x, y, z])
+        self.cyclopeanPOR_XY = np.vstack((self.cyclopeanPOR_XY, [x, y]))
+
         
+        rx = self.rawDataStruct['rightPOR_XY'][0,self.frameNumber]
+        ry = self.rawDataStruct['rightPOR_XY'][1,self.frameNumber]
+        rx = (rx /1920.0)*0.126 - 0.126/2.0
+        ry = -(ry/1080.0)*0.071 + 0.071/2.0
+        rz = self.rightPOR.getPosition()[2]
+        self.rightPOR.setPosition([rx, ry, rz])
+        self.rightEyePOR_XY = np.vstack((self.rightEyePOR_XY, [rx, ry]))
+
+        lx = self.rawDataStruct['leftPOR_XY'][0,self.frameNumber]
+        ly = self.rawDataStruct['leftPOR_XY'][1,self.frameNumber]
+        lx = (lx /1920.0)*0.126 - 0.126/2.0
+        ly = -(ly/1080.0)*0.071 + 0.071/2.0
+        lz = self.leftPOR.getPosition()[2]
+        self.leftPOR.setPosition([lx, ly, lz])
+        self.leftEyePOR_XY = np.vstack((self.leftEyePOR_XY, [lx, ly]))
         
         self.rightGazePoint_XYZ = [ -self.rawDataStruct['rightGazeDir_XYZ'][0,self.frameNumber], self.rawDataStruct['rightGazeDir_XYZ'][1,self.frameNumber], self.rawDataStruct['rightGazeDir_XYZ'][2,self.frameNumber]]
-        self.rightScale = np.linalg.norm(self.rawDataStruct['ball_Pos_XYZ'][:,self.frameNumber] - self.rightEyeNode.getPosition(viz.ABS_GLOBAL))
+
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):        
+            self.rightScale = np.linalg.norm(self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter] - self.rightEyeNode.getPosition(viz.ABS_GLOBAL))
+        else:
+            self.rightScale = np.linalg.norm(self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall] - self.rightEyeNode.getPosition(viz.ABS_GLOBAL))
+            
         self.rightGazePoint_XYZ = np.multiply(self.rightGazePoint_XYZ, self.rightScale)
         self.rightGazeSphere.setPosition(self.rightGazePoint_XYZ[0], self.rightGazePoint_XYZ[1], self.rightGazePoint_XYZ[2], viz.ABS_PARENT)
         self.rightGazeVector.setVertex(0, self.rightEyeNode.getPosition(mode = viz.ABS_GLOBAL), viz.ABS_GLOBAL)
-        self.rightGazeVector.setVertex(1, self.rightGazeSphere.getPosition(viz.ABS_GLOBAL), viz.ABS_GLOBAL)
+        # This was the method to use gaze direction vector to draw gaze vector
+        #self.rightGazeVector.setVertex(1, self.rightGazeSphere.getPosition(viz.ABS_GLOBAL), viz.ABS_GLOBAL)
+
+        # This was the method to use Screen Coordinates to draw gaze vector from Eye to screen
+        #self.rightGazeVector.setVertex(1, self.rightPOR.getPosition( mode = viz.ABS_GLOBAL), viz.ABS_GLOBAL)
+
+        rightEyeToScreenLine = createLine(self.rightPOR.getPosition( mode = viz.ABS_GLOBAL), self.rightEyeNode.getPosition( mode = viz.ABS_GLOBAL))
+        pos = self.rightEyeNode.getPosition(mode = viz.ABS_GLOBAL) + np.multiply(rightEyeToScreenLine, self.rightScale)
+        self.rightGazeVector.setVertex(1,[pos[0], pos[1], pos[2]] , viz.ABS_GLOBAL)
         
+        point0 = np.array([0.0,0.0,0.0])
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            line = self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter]# - self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL)
+        else:
+            line = self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall]# - self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL)            
+        planeNormal = np.array([0.0,0.0,1.0])
+        point1 = np.array([0.0,0.0,0.0725])
+        pos = findLinePlaneIntersection( point0, line, planeNormal, point1)
+        self.pixelatedBall.setPosition(pos[0], pos[1], 0)
+        self.truePOR_XY = np.vstack((self.truePOR_XY, [pos[0], pos[1]]))
 
         self.leftGazePoint_XYZ = [ -self.rawDataStruct['leftGazeDir_XYZ'][0,self.frameNumber], self.rawDataStruct['leftGazeDir_XYZ'][1,self.frameNumber], self.rawDataStruct['leftGazeDir_XYZ'][2,self.frameNumber]]
-        self.leftScale = np.linalg.norm(self.rawDataStruct['ball_Pos_XYZ'][:,self.frameNumber] - self.leftEyeNode.getPosition(viz.ABS_GLOBAL))
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.leftScale = np.linalg.norm(self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter] - self.leftEyeNode.getPosition(viz.ABS_GLOBAL))
+        else:
+            self.leftScale = np.linalg.norm(self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall] - self.leftEyeNode.getPosition(viz.ABS_GLOBAL))
+            
         self.leftGazePoint_XYZ = np.multiply(self.leftGazePoint_XYZ, self.leftScale)
         self.leftGazeSphere.setPosition(self.leftGazePoint_XYZ[0], self.leftGazePoint_XYZ[1], self.leftGazePoint_XYZ[2], viz.ABS_PARENT)
         self.leftGazeVector.setVertex(0, self.leftEyeNode.getPosition(mode = viz.ABS_GLOBAL), viz.ABS_GLOBAL)
-        self.leftGazeVector.setVertex(1, self.leftGazeSphere.getPosition(viz.ABS_GLOBAL), viz.ABS_GLOBAL)
+        # This was the method to use gaze direction vector to draw gaze vector
+        #self.leftGazeVector.setVertex(1, self.leftGazeSphere.getPosition(viz.ABS_GLOBAL), viz.ABS_GLOBAL)
+        
+        # This was the method to use Screen Coordinates to draw gaze vector from Eye to screen
+        #self.leftGazeVector.setVertex(1, self.leftPOR.getPosition(mode = viz.ABS_GLOBAL), viz.ABS_GLOBAL)
+
+        leftEyeToScreenLine = createLine(self.leftPOR.getPosition( mode = viz.ABS_GLOBAL), self.leftEyeNode.getPosition( mode = viz.ABS_GLOBAL))
+        pos = self.leftEyeNode.getPosition(mode = viz.ABS_GLOBAL) + np.multiply(leftEyeToScreenLine, self.leftScale)
+        self.leftGazeVector.setVertex(1,[pos[0], pos[1], pos[2]] , viz.ABS_GLOBAL)
         
         self.EyeBallLine.setVertex(0, self.rawDataStruct['view_Pos_XYZ'][0,self.frameNumber], self.rawDataStruct['view_Pos_XYZ'][1,self.frameNumber], self.rawDataStruct['view_Pos_XYZ'][2,self.frameNumber], viz.ABS_GLOBAL)
-        self.EyeBallLine.setVertex(1, self.rawDataStruct['ball_Pos_XYZ'][0,self.frameNumber], self.rawDataStruct['ball_Pos_XYZ'][1,self.frameNumber], self.rawDataStruct['ball_Pos_XYZ'][2,self.frameNumber], viz.ABS_GLOBAL)
-        
-        self.ballPlane.setPosition(*self.rawDataStruct['ball_Pos_XYZ'][:,self.frameNumber])
 
-        self.V1 = self.rawDataStruct['ball_Pos_XYZ'][:,self.frameNumber] - self.cyclopEyeNode.getPosition()
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.EyeBallLine.setVertex(1, self.rawDataStruct['calibration_Pos_XYZ'][0,self.internalCounter], self.rawDataStruct['calibration_Pos_XYZ'][1,self.internalCounter], self.rawDataStruct['calibration_Pos_XYZ'][2,self.internalCounter], viz.ABS_GLOBAL)
+        else:
+            self.EyeBallLine.setVertex(1, self.rawDataStruct['ball_Pos_XYZ'][0,self.internalCounterBall], self.rawDataStruct['ball_Pos_XYZ'][1,self.internalCounterBall], self.rawDataStruct['ball_Pos_XYZ'][2,self.internalCounterBall], viz.ABS_GLOBAL)
+            
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.ballPlane.setPosition(*self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter])
+        else:
+            self.ballPlane.setPosition(*self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall])            
+
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.V1 = self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter] - self.cyclopEyeNode.getPosition()
+        else:
+            self.V1 = self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall] - self.cyclopEyeNode.getPosition()
+            
         self.V2 =  self.leftGazePoint_XYZ - self.leftEyeNode.getPosition(viz.ABS_GLOBAL) + self.rightGazePoint_XYZ - self.rightEyeNode.getPosition(viz.ABS_GLOBAL) 
 
         self.V3 =  self.leftGazePoint_XYZ  + self.rightGazePoint_XYZ
         self.eyeGazeVector.setVertex(0,0,0, viz.ABS_PARENT)
-        self.eyeGazeVector.setVertex(1, self.V3[0]/2.0, self.V3[1]/2.0, self.V3[2]/2.0, viz.ABS_PARENT)
+
+        # This was the method to use right and left Gaze sphere to draw the cyclopean eye
+        #self.eyeGazeVector.setVertex(1, self.V3[0]/2.0, self.V3[1]/2.0, self.V3[2]/2.0, viz.ABS_PARENT)
+        cyclopEyeToScreenLine = createLine(self.eyePOR.getPosition( mode = viz.ABS_GLOBAL), self.cyclopEyeNode.getPosition( mode = viz.ABS_GLOBAL))
+
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.cyclopScale = np.linalg.norm(self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter] - self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL))
+        else:
+            self.cyclopScale = np.linalg.norm(self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall] - self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL))
+            
+        pos = self.cyclopEyeNode.getPosition(mode = viz.ABS_GLOBAL) + np.multiply(cyclopEyeToScreenLine, self.cyclopScale)
+        self.eyeGazeVector.setVertex(1,[pos[0], pos[1], pos[2]] , viz.ABS_GLOBAL)
         self.eyeGazeSphere.setPosition(self.eyeGazeVector.getVertex(1), viz.ABS_PARENT)
 
-        self.V1 = self.rawDataStruct['ball_Pos_XYZ'][:,self.frameNumber] - self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL)
+        if (self.rawDataStruct['calibrationFlag'][self.frameNumber] == 1 ):
+            self.V1 = self.rawDataStruct['calibration_Pos_XYZ'][:,self.internalCounter] - self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL)
+        else:
+            self.V1 = self.rawDataStruct['ball_Pos_XYZ'][:,self.internalCounterBall] - self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL)
+            
         #V2 = eyeGazeSphere.getPosition(viz.ABS_GLOBAL) - cyclopEyeNode.getPosition(viz.ABS_GLOBAL)
         self.V2 = [a - b for a, b in zip(self.eyeGazeSphere.getPosition(viz.ABS_GLOBAL), self.cyclopEyeNode.getPosition(viz.ABS_GLOBAL))]
         # XYZ = [l1[idx][0] - l2[idx][0] , l1[idx][1] - l2[idx][1], l1[idx][2] - l2[idx][2]  for idx in range(len(l1))]
-        errorAngle = np.multiply(self.angle(self.V2, self.V1), 180/np.pi)
+        errorAngle = np.multiply(angle(self.V2, self.V1), 180/np.pi)
         #print 'Angle = ', errorAngle
         #if (calibrationStatus[self.frameNumber] == 1):
         #errorArray[calibrationCounter[self.frameNumber], pointCounter[calibrationCounter[self.frameNumber]]] = errorAngle
-        #viz.MainView.setPosition(*Ball_Pos_XYZ[:,self.frameNumber] + [0.0, 0.4, -1.5])
+        #viz.MainView.setPosition(*Ball_Pos_XYZ[:,self.internalCounterBall] + [0.0, 0.4, -1.5])
         #if (calibrationStatus[self.frameNumber] == 0):
         string = 'PerForM Lab'#'Before Calibration'
         #else:
@@ -520,14 +705,14 @@ class visualization():
         if ( self.viewPointCounter == 0 ):
             viz.MainView.setPosition([2.552443504333496, 2.406543731689453, 1.4710679054260254])
             viz.MainView.setEuler([-90, 0.0, 0.0])
-            self.viewPointCounter = 1
+            self.viewPointCounter = 2
         elif( self.viewPointCounter == 1 ):
-            viz.MainView.setPosition([0.6917849779129028, 2.0247855186462402, -0.20941883325576782])
-            viz.MainView.setEuler([-22.73750877380371, -3.614262342453003, -0.09662231057882309])
+            viz.MainView.setPosition([-0.41021019220352173, 1.254163146018982, 1.251746416091919])
+            viz.MainView.setEuler([8.187896728515625, -0.0, 0.0])
             self.viewPointCounter = 2
         elif( self.viewPointCounter == 2 ):
-            viz.MainView.setPosition([0.4033511281013489, 1.7814747095108032, -1.921712040901184])
-            viz.MainView.setEuler([0.251657485961914, -0.0, 0.0])
+            viz.MainView.setPosition(self.cyclopEyeNode.getPosition())
+            viz.MainView.setEuler(self.cyclopEyeNode.getEuler())
             self.viewPointCounter = 0
         
         
@@ -539,13 +724,14 @@ if __name__ == '__main__':
     errorArray = np.zeros((27,80))
     pointCounter = np.zeros(27)
     viewPointFlag = False
-    TimeInterval = 0.0633#0.01327800000001389 # 0.067
+    TimeInterval = 0.001#0.0133#0.01327800000001389 # 0.067
     nearH = 1.2497;
     nearW = 1.5622;
     viz.setMultiSample(4)
     viz.fov(60)
     viz.go()
-    textFileName = 'exp_data-2015-7-21-20-51'# 'exp_data-2015-4-24-13-34'
+    viz.window.setFullscreenMonitor(2)
+    textFileName = 'exp_data-2015-10-25-22-29'#'exp_data-2015-10-25-18-35'#'exp_data-2015-10-6-20-8'#'exp_data-2015-9-30-14-26'#'exp_data-2015-9-25-20-34'#'exp_data-2015-8-18-18-34'# 'exp_data-2015-4-24-13-34'
 
     myVisualization = visualization(textFileName)
     myVisualization.extractDataFromMatFile()#'Exp_RawMat_calib_data-2015-5-12-21-45.mat');
@@ -567,4 +753,12 @@ if __name__ == '__main__':
     viz.window.setFullscreenMonitor(2)
     vizact.onkeydown('v', myVisualization.updateViewPoint)
 
+    point0 = np.array([4.0,0.0, -5.0])
+    point1 = np.array([-8.0,5.0, 0.0])
+    line = np.array([0.0,0.0,6.0])
+    planeNormal = np.array([0.0,0.0,2.0])
+    print 'Test =', findLinePlaneIntersection(point0, line, planeNormal, point1)
     
+    vizact.onkeydown('b', viz.window.startRecording, 'test01.avi' ) 
+    vizact.onkeydown('e', viz.window.stopRecording )
+    myVisualization.male.visible(viz.OFF)
